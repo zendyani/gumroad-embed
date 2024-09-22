@@ -2,9 +2,9 @@
 /**
  * Plugin Name: Gumroad Embed for WooCommerce
  * Plugin URI: https://example.com/
- * Description: Adds a Gumroad embed button to WooCommerce external products.
+ * Description: Automatically adds a Gumroad embed button to WooCommerce external products with Gumroad URLs.
  * Version: 0.9
- * Author: Belakhdar Abdeldjalil
+ * Author: Abdeldjalil
  * Author URI: https://example.com/
  * License: GPLv3
  * Text Domain: gumroad-embed-for-woocommerce
@@ -22,6 +22,9 @@ if (!defined('ABSPATH')) {
  */
 class Gumroad_Embed_For_WooCommerce {
 
+    /**
+     * Constructor.
+     */
     public function __construct() {
         add_action('plugins_loaded', array($this, 'init'));
     }
@@ -36,14 +39,8 @@ class Gumroad_Embed_For_WooCommerce {
             return;
         }
 
-        // Add Gumroad Embed Checkbox to External/Affiliate Products.
-        add_action('woocommerce_product_options_general_product_data', array($this, 'add_gumroad_checkbox'));
-
-        // Save Gumroad Embed Checkbox Value.
-        add_action('woocommerce_process_product_meta', array($this, 'save_gumroad_checkbox'));
-
         // Replace External Buy Button with Gumroad Embed Code.
-        add_action('woocommerce_after_add_to_cart_button', array($this, 'replace_with_gumroad_button'));
+        add_filter('woocommerce_external_add_to_cart', array($this, 'maybe_replace_with_gumroad_button'), 10);
 
         // Enqueue scripts and styles.
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
@@ -61,53 +58,37 @@ class Gumroad_Embed_For_WooCommerce {
     }
 
     /**
-     * Add Gumroad Embed Checkbox to External/Affiliate Products.
-     */
-    public function add_gumroad_checkbox() {
-        global $product_object;
-
-        // Check if the product type is external/affiliate.
-        if ($product_object && 'external' === $product_object->get_type()) {
-            woocommerce_wp_checkbox(
-                array(
-                    'id'          => '_use_gumroad_embed',
-                    'label'       => __('Use Gumroad Embed', 'gumroad-embed-for-woocommerce'),
-                    'description' => __('Replace the buy button with Gumroad embed.', 'gumroad-embed-for-woocommerce'),
-                )
-            );
-        }
-    }
-
-    /**
-     * Save Gumroad Embed Checkbox Value.
+     * Replace External Buy Button with Gumroad Embed Code if the URL is a Gumroad URL.
      *
-     * @param int $post_id The post ID.
+     * @param string $button_html The original button HTML.
+     * @return string Modified button HTML.
      */
-    public function save_gumroad_checkbox($post_id) {
-        $use_gumroad_embed = isset($_POST['_use_gumroad_embed']) ? 'yes' : 'no';
-        update_post_meta($post_id, '_use_gumroad_embed', sanitize_text_field($use_gumroad_embed));
-    }
-
-    /**
-     * Replace External Buy Button with Gumroad Embed Code.
-     */
-    public function replace_with_gumroad_button() {
+    public function maybe_replace_with_gumroad_button($button_html) {
         global $product;
 
         if ($product && 'external' === $product->get_type()) {
-            $use_gumroad_embed = get_post_meta($product->get_id(), '_use_gumroad_embed', true);
+            $product_url = $product->get_product_url();
 
-            if ('yes' === $use_gumroad_embed) {
-                // Get the external product URL (this will be used as the Gumroad link).
-                $product_url = esc_url($product->get_product_url());
-
-                // Output the Gumroad embed code with the correct URL.
+            if ($this->is_gumroad_url($product_url)) {
+                ob_start();
                 ?>
-                <a class="gumroad-button" href="<?php echo $product_url; ?>"><?php esc_html_e('Buy on Gumroad', 'gumroad-embed-for-woocommerce'); ?></a>
-                <style> .single_add_to_cart_button { display: none !important; } </style>
+                <a class="gumroad-button" href="<?php echo esc_url($product_url); ?>"><?php esc_html_e('Buy on Gumroad', 'gumroad-embed-for-woocommerce'); ?></a>
                 <?php
+                $button_html = ob_get_clean();
             }
         }
+
+        return $button_html;
+    }
+
+    /**
+     * Check if the given URL is a Gumroad URL.
+     *
+     * @param string $url The URL to check.
+     * @return boolean True if it's a Gumroad URL, false otherwise.
+     */
+    private function is_gumroad_url($url) {
+        return (strpos($url, 'gumroad.com') !== false);
     }
 
     /**
@@ -120,3 +101,19 @@ class Gumroad_Embed_For_WooCommerce {
 
 // Initialize the plugin.
 new Gumroad_Embed_For_WooCommerce();
+
+/**
+ * Activation hook.
+ */
+function gumroad_embed_activate() {
+    // Activation tasks if needed.
+}
+register_activation_hook(__FILE__, 'gumroad_embed_activate');
+
+/**
+ * Deactivation hook.
+ */
+function gumroad_embed_deactivate() {
+    // Deactivation tasks if needed.
+}
+register_deactivation_hook(__FILE__, 'gumroad_embed_deactivate');
